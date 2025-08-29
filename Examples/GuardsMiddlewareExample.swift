@@ -35,7 +35,7 @@ struct GuardsMiddlewareExample: View {
                 name: "profile",
                 guards: [
                     AuthenticationGuard(
-                        isAuthenticated: { UserSession.shared.isAuthenticated },
+                        isAuthenticated: { UserSession.shared.isAuthenticatedValue },
                         redirectPath: "/login"
                     ),
                     AuthorizationGuard(
@@ -70,16 +70,16 @@ struct GuardsMiddlewareExample: View {
                 name: "admin",
                 guards: [
                     AuthenticationGuard(
-                        isAuthenticated: { UserSession.shared.isAuthenticated },
+                        isAuthenticated: { UserSession.shared.isAuthenticatedValue },
                         redirectPath: "/login"
                     ),
                     AuthorizationGuard(
-                        hasPermission: { _ in UserSession.shared.isAdmin },
+                        hasPermission: { _ in UserSession.shared.isAdminValue },
                         deniedPath: "/access-denied"
                     ),
                     ConditionalGuard(
                         name: "MaintenanceGuard",
-                        condition: { _ in !SystemStatus.shared.isUnderMaintenance },
+                        condition: { _ in !SystemStatus.shared.isUnderMaintenanceValue },
                         onFalse: .redirect(to: "/maintenance")
                     )
                 ],
@@ -205,28 +205,42 @@ struct SecurityMiddleware: RouteMiddleware {
     }
 }
 
-struct RateLimitingMiddleware: RouteMiddleware {
-    let name: String
-    private static var requestCounts: [String: Int] = [:]
-    private static var lastReset = Date()
+actor RateLimitStore {
+    private var requestCounts: [String: Int] = [:]
+    private var lastReset = Date()
     
-    func process(context: RouteContext) async -> MiddlewareResult {
+    func checkAndUpdateRateLimit(for path: String) -> Bool {
         let now = Date()
         
         // Reset counts every minute
-        if now.timeIntervalSince(Self.lastReset) > 60 {
-            Self.requestCounts.removeAll()
-            Self.lastReset = now
+        if now.timeIntervalSince(lastReset) > 60 {
+            requestCounts.removeAll()
+            lastReset = now
         }
         
         // Check rate limit (10 requests per minute per path)
-        let currentCount = Self.requestCounts[context.fullPath, default: 0]
+        let currentCount = requestCounts[path, default: 0]
         if currentCount >= 10 {
-            return .error(MiddlewareError.processingFailed("Rate limit exceeded"))
+            return false // Rate limit exceeded
         }
         
-        Self.requestCounts[context.fullPath] = currentCount + 1
-        return .proceed(context)
+        requestCounts[path] = currentCount + 1
+        return true // Request allowed
+    }
+}
+
+struct RateLimitingMiddleware: RouteMiddleware {
+    let name: String
+    private static let store = RateLimitStore()
+    
+    func process(context: RouteContext) async -> MiddlewareResult {
+        let allowed = await Self.store.checkAndUpdateRateLimit(for: context.fullPath)
+        
+        if allowed {
+            return .proceed(context)
+        } else {
+            return .error(MiddlewareError.processingFailed("Rate limit exceeded"))
+        }
     }
 }
 
@@ -243,18 +257,44 @@ struct UserData: Sendable {
     let email: String
 }
 
-class UserSession: ObservableObject {
+final class UserSession: ObservableObject, @unchecked Sendable {
     static let shared = UserSession()
+    
+    private let queue = DispatchQueue(label: "UserSession", attributes: .concurrent)
+    private var _authenticated = false
+    private var _admin = false
+    private var _userPermissions: Set<String> = []
     
     @Published var isAuthenticated = false
     @Published var isAdmin = false
     @Published var permissions: Set<String> = []
     
-    func hasPermission(_ permission: String) -> Bool {
-        return permissions.contains(permission)
+    private init() {}
+    
+    var isAuthenticatedValue: Bool {
+        queue.sync { _authenticated }
     }
     
+    var isAdminValue: Bool {
+        queue.sync { _admin }
+    }
+    
+    func hasPermission(_ permission: String) -> Bool {
+        queue.sync { _userPermissions.contains(permission) }
+    }
+    
+    @MainActor
     func login(asAdmin: Bool = false) {
+        queue.async(flags: .barrier) { [weak self] in
+            self?._authenticated = true
+            self?._admin = asAdmin
+            if asAdmin {
+                self?._userPermissions = ["profile.view", "admin.access", "users.manage"]
+            } else {
+                self?._userPermissions = ["profile.view"]
+            }
+        }
+        
         isAuthenticated = true
         isAdmin = asAdmin
         if asAdmin {
@@ -264,17 +304,41 @@ class UserSession: ObservableObject {
         }
     }
     
+    @MainActor
     func logout() {
+        queue.async(flags: .barrier) { [weak self] in
+            self?._authenticated = false
+            self?._admin = false
+            self?._userPermissions.removeAll()
+        }
+        
         isAuthenticated = false
         isAdmin = false
         permissions.removeAll()
     }
 }
 
-class SystemStatus: ObservableObject {
+final class SystemStatus: ObservableObject, @unchecked Sendable {
     static let shared = SystemStatus()
     
+    private let queue = DispatchQueue(label: "SystemStatus", attributes: .concurrent)
+    private var _maintenance = false
+    
     @Published var isUnderMaintenance = false
+    
+    private init() {}
+    
+    var isUnderMaintenanceValue: Bool {
+        queue.sync { _maintenance }
+    }
+    
+    @MainActor
+    func setMaintenanceMode(_ enabled: Bool) {
+        queue.async(flags: .barrier) { [weak self] in
+            self?._maintenance = enabled
+        }
+        isUnderMaintenance = enabled
+    }
 }
 
 // MARK: - Views
