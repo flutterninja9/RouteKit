@@ -45,6 +45,9 @@ public class RouteKit: ObservableObject {
     /// Debug logging enabled
     public let debugLogDiagnostics: Bool
     
+    /// Guard and middleware manager
+    @Published public internal(set) var guardMiddlewareManager: GuardMiddlewareManager
+    
     /// Maximum number of redirects before stopping
     private let redirectLimit: Int
     
@@ -106,6 +109,20 @@ public class RouteKit: ObservableObject {
             self.currentStatefulShell = nil
         }
         
+        // Initialize guard and middleware manager
+        self.guardMiddlewareManager = GuardMiddlewareManager()
+        self.guardMiddlewareManager.debugEnabled = debugLogDiagnostics
+        
+        // Register route-specific guards and middleware
+        for route in flatRoutes {
+            for routeGuard in route.guards {
+                guardMiddlewareManager.addGuard(routeGuard, for: route.path)
+            }
+            for middleware in route.middleware {
+                guardMiddlewareManager.addMiddleware(middleware, for: route.path)
+            }
+        }
+        
         // Set router reference for stateful shell after initialization
         DispatchQueue.main.async { [weak self] in
             self?.currentStatefulShell?.router = self
@@ -115,12 +132,12 @@ public class RouteKit: ObservableObject {
     // MARK: - Public Navigation Methods
     
     /// Navigate to a path, replacing the current route stack
-    public func go(_ path: String, extra: Any? = nil) {
+    public func go(_ path: String, extra: (any Sendable)? = nil) {
         _navigateToPath(path, extra: extra, replace: true)
     }
     
     /// Push a new route onto the navigation stack
-    public func push(_ path: String, extra: Any? = nil) {
+    public func push(_ path: String, extra: (any Sendable)? = nil) {
         _navigateToPath(path, extra: extra, replace: false)
     }
     
@@ -141,7 +158,7 @@ public class RouteKit: ObservableObject {
         _ name: String,
         pathParameters: [String: String] = [:],
         queryParameters: [String: String] = [:],
-        extra: Any? = nil
+        extra: (any Sendable)? = nil
     ) {
         guard let route = namedRoutes[name] else {
             handleError(RoutingError.routeNotFound("Named route '\(name)' not found"))
@@ -157,7 +174,7 @@ public class RouteKit: ObservableObject {
         _ name: String,
         pathParameters: [String: String] = [:],
         queryParameters: [String: String] = [:],
-        extra: Any? = nil
+        extra: (any Sendable)? = nil
     ) {
         guard let route = namedRoutes[name] else {
             handleError(RoutingError.routeNotFound("Named route '\(name)' not found"))
@@ -187,9 +204,51 @@ public class RouteKit: ObservableObject {
         go(path)
     }
     
+    // MARK: - Guards and Middleware Management
+    
+    /// Add a global guard that applies to all routes
+    public func addGlobalGuard(_ routeGuard: RouteGuard) {
+        guardMiddlewareManager.addGlobalGuard(routeGuard)
+    }
+    
+    /// Add a guard for a specific route pattern
+    public func addGuard(_ routeGuard: RouteGuard, for routePattern: String) {
+        guardMiddlewareManager.addGuard(routeGuard, for: routePattern)
+    }
+    
+    /// Add global middleware that applies to all routes
+    public func addGlobalMiddleware(_ middleware: RouteMiddleware) {
+        guardMiddlewareManager.addGlobalMiddleware(middleware)
+    }
+    
+    /// Add middleware for a specific route pattern
+    public func addMiddleware(_ middleware: RouteMiddleware, for routePattern: String) {
+        guardMiddlewareManager.addMiddleware(middleware, for: routePattern)
+    }
+    
+    /// Remove guards for a specific route pattern
+    public func removeGuards(for routePattern: String) {
+        guardMiddlewareManager.removeGuards(for: routePattern)
+    }
+    
+    /// Remove middleware for a specific route pattern
+    public func removeMiddleware(for routePattern: String) {
+        guardMiddlewareManager.removeMiddleware(for: routePattern)
+    }
+    
+    /// Clear all global guards
+    public func clearGlobalGuards() {
+        guardMiddlewareManager.clearGlobalGuards()
+    }
+    
+    /// Clear all global middleware
+    public func clearGlobalMiddleware() {
+        guardMiddlewareManager.clearGlobalMiddleware()
+    }
+    
     // MARK: - Private Methods
     
-    private func _navigateToPath(_ path: String, extra: Any? = nil, replace: Bool, updateStack: Bool = true) {
+    private func _navigateToPath(_ path: String, extra: (any Sendable)? = nil, replace: Bool, updateStack: Bool = true) {
         let normalizedPath = URLParser.normalizePath(path)
         log("Navigating to: \(normalizedPath)")
         
@@ -241,8 +300,8 @@ public class RouteKit: ObservableObject {
             return
         }
         
-        // Check route guard
-        let context = RouteContext(
+        // Create route context for guard and middleware execution
+        let routeContext = RouteContext(
             fullPath: finalPath,
             matchedPath: match.matchedPath,
             pathParameters: match.pathParameters,
@@ -251,28 +310,78 @@ public class RouteKit: ObservableObject {
             navigationStack: navigationStack
         )
         
-        if let routeGuard = match.route.routeGuard, !routeGuard(context) {
-            handleError(RoutingError.guardRejected(finalPath))
+        // Execute guards and middleware asynchronously
+        Task { @MainActor in
+            await executeGuardsAndMiddleware(for: routeContext, route: match.route, replace: replace, updateStack: updateStack)
+        }
+    }
+    
+    /// Execute guards and middleware for a route
+    private func executeGuardsAndMiddleware(for context: RouteContext, route: Route, replace: Bool, updateStack: Bool) async {
+        // Check legacy route guard first (for backward compatibility)
+        if let routeGuard = route.routeGuard, !routeGuard(context) {
+            handleError(RoutingError.guardRejected(context.fullPath))
             return
         }
         
+        // Execute new guards system
+        let guardResult = await guardMiddlewareManager.executeGuards(for: context)
+        
+        switch guardResult {
+        case .allow(let allowedContext):
+            // Guards passed, now execute middleware
+            let middlewareResult = await guardMiddlewareManager.executeMiddleware(for: allowedContext)
+            
+            switch middlewareResult {
+            case .proceed(let finalContext):
+                // All checks passed, proceed with navigation
+                await completeNavigation(context: finalContext, route: route, replace: replace, updateStack: updateStack)
+                
+            case .redirect(let redirectPath):
+                log("Middleware redirected to: \(redirectPath)")
+                _navigateToPath(redirectPath, extra: context.extra, replace: replace, updateStack: updateStack)
+                
+            case .error(let error):
+                log("Middleware failed: \(error)")
+                handleError(error)
+            }
+            
+        case .deny(let error):
+            log("Guard denied navigation: \(error)")
+            handleError(error)
+            
+        case .redirect(let redirectPath):
+            log("Guard redirected to: \(redirectPath)")
+            _navigateToPath(redirectPath, extra: context.extra, replace: replace, updateStack: updateStack)
+            
+        case .error(let error):
+            log("Guard failed: \(error)")
+            handleError(error)
+        }
+    }
+    
+    /// Complete the navigation after all guards and middleware have passed
+    private func completeNavigation(context: RouteContext, route: Route, replace: Bool, updateStack: Bool) async {
         // Update navigation state
         if updateStack {
             if replace {
                 if navigationStack.isEmpty {
-                    navigationStack = [finalPath]
+                    navigationStack = [context.fullPath]
                 } else {
-                    navigationStack[navigationStack.count - 1] = finalPath
+                    navigationStack[navigationStack.count - 1] = context.fullPath
                 }
             } else {
-                navigationStack.append(finalPath)
+                navigationStack.append(context.fullPath)
             }
         }
         
-        currentPath = finalPath
+        currentPath = context.fullPath
         currentContext = context
         
-        log("Navigation successful to: \(finalPath)")
+        // Notify middleware that the route has been activated
+        await guardMiddlewareManager.notifyRouteActivated(context: context)
+        
+        log("Navigation successful to: \(context.fullPath)")
     }
     
     private func findMatchingRoute(for path: String) -> RouteMatch? {

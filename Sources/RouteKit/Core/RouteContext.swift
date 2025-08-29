@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Route context containing navigation state and parameters
 /// Equivalent to GoRouterState in Flutter's GoRouter
-public struct RouteContext {
+public struct RouteContext: Sendable {
     /// The full URL path that was matched
     public let fullPath: String
     
@@ -17,7 +17,7 @@ public struct RouteContext {
     public let queryParameters: [String: String]
     
     /// Additional data passed during navigation
-    public let extra: Any?
+    public let extra: (any Sendable)?
     
     /// The route name if it was named
     public let name: String?
@@ -36,7 +36,7 @@ public struct RouteContext {
         matchedPath: String = "",
         pathParameters: [String: String] = [:],
         queryParameters: [String: String] = [:],
-        extra: Any? = nil,
+        extra: (any Sendable)? = nil,
         name: String? = nil,
         navigationStack: [String] = [],
         error: Error? = nil
@@ -60,7 +60,7 @@ public struct RouteContext {
     }
     
     /// Create a route context from a URL
-    public static func from(url: URL, matchedPath: String = "", pathParameters: [String: String] = [:], extra: Any? = nil, name: String? = nil, navigationStack: [String] = []) -> RouteContext {
+    public static func from(url: URL, matchedPath: String = "", pathParameters: [String: String] = [:], extra: (any Sendable)? = nil, name: String? = nil, navigationStack: [String] = []) -> RouteContext {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false) ?? URLComponents()
         let queryParams = components.queryItems?.reduce(into: [String: String]()) { result, item in
             result[item.name] = item.value ?? ""

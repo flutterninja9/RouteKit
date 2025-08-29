@@ -20,10 +20,10 @@ RouteKit is a powerful, type-safe routing library for SwiftUI applications, insp
 - **Navigation Controller**: Sophisticated navigation management
 - **Breadcrumb Support**: Automatic breadcrumb generation for deep navigation
 
-### Phase 3 (Coming Soon)
-- **Type-Safe Routes**: Compile-time route validation with Swift macros
+### Phase 3 (Advanced Features) ✅ 
 - **Advanced Guards**: Route guards and middleware support
-- **Deep Linking**: Enhanced deep link handling and URL scheme support
+- **Type-Safe Routes**: Compile-time route validation with Swift macros (coming soon)
+- **Deep Linking**: Enhanced deep link handling and URL scheme support (coming soon)
 
 ## Quick Start
 
@@ -217,6 +217,43 @@ struct MyView: View {
 }
 ```
 
+## Guards and Middleware
+
+RouteKit provides a powerful guards and middleware system for advanced route protection and request processing:
+
+```swift
+// Authentication guard
+let authGuard = AuthenticationGuard(
+    isAuthenticated: { UserSession.shared.isLoggedIn },
+    redirectPath: "/login"
+)
+
+// Logging middleware
+let logger = LoggingMiddleware { message in
+    print("🛣️ Navigation: \(message)")
+}
+
+// Apply to routes
+router.addGuard(authGuard, for: "/profile")
+router.addGlobalMiddleware(logger)
+```
+
+### Built-in Guards
+- **AuthenticationGuard**: Check user authentication status
+- **AuthorizationGuard**: Verify user permissions
+- **ValidationGuard**: Validate route parameters
+- **ConditionalGuard**: Custom async condition checks
+- **ClosureGuard**: Simple closure-based guards
+
+### Built-in Middleware
+- **LoggingMiddleware**: Log navigation events
+- **AnalyticsMiddleware**: Track user journeys
+- **DataLoadingMiddleware**: Pre-load route data
+- **PerformanceMiddleware**: Monitor navigation performance
+- **ContextModificationMiddleware**: Modify route contexts
+
+For detailed documentation, see [Guards and Middleware Guide](GUARDS_MIDDLEWARE.md).
+
 ## Route Parameters
 
 ### Path Parameters
@@ -325,11 +362,10 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ## Roadmap
 
-### Phase 3 (Planned)
-- Swift macros for compile-time route validation
-- Route guards and middleware system
-- Enhanced deep linking support
-- Animation and transition system
-- Performance optimizations
+### Phase 4 (Planned)
+- **Type-Safe Routes**: Swift macros for compile-time route validation
+- **Enhanced Deep Linking**: URL scheme support and deep link handling
+- **Animation System**: Route transition animations
+- **Performance Optimizations**: Advanced caching and lazy loading
 
 RouteKit aims to be the most powerful and flexible routing solution for SwiftUI applications, providing the tools needed for everything from simple navigation to complex, nested, multi-stack applications.

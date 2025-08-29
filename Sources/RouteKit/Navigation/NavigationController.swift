@@ -98,7 +98,7 @@ public class NavigationController: ObservableObject {
     }
     
     /// Navigate with enhanced route resolution
-    func navigate(to path: String, extra: Any? = nil, replace: Bool = true) {
+    func navigate(to path: String, extra: (any Sendable)? = nil, replace: Bool = true) {
         guard let router = router else { return }
         
         let normalizedPath = URLParser.normalizePath(path)
@@ -261,7 +261,7 @@ extension RouteKit {
     }
     
     /// Enhanced navigation method using the navigation controller
-    internal func enhancedNavigate(to path: String, extra: Any? = nil, replace: Bool = true) {
+    internal func enhancedNavigate(to path: String, extra: (any Sendable)? = nil, replace: Bool = true) {
         navigationController.navigate(to: path, extra: extra, replace: replace)
     }
     

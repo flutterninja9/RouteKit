@@ -19,8 +19,14 @@ public struct Route {
     /// Redirect function for conditional navigation
     public let redirect: ((RouteContext) -> String?)?
     
-    /// Route guard for access control
+    /// Route guard for access control (deprecated - use guards array instead)
     public let routeGuard: ((RouteContext) -> Bool)?
+    
+    /// Route guards for advanced access control
+    public let guards: [RouteGuard]
+    
+    /// Route middleware for processing requests
+    public let middleware: [RouteMiddleware]
     
     public init(
         path: String,
@@ -28,6 +34,8 @@ public struct Route {
         routes: [Route] = [],
         redirect: ((RouteContext) -> String?)? = nil,
         routeGuard: ((RouteContext) -> Bool)? = nil,
+        guards: [RouteGuard] = [],
+        middleware: [RouteMiddleware] = [],
         @ViewBuilder builder: @escaping (RouteContext) -> some View
     ) {
         self.path = path
@@ -35,6 +43,8 @@ public struct Route {
         self.routes = routes
         self.redirect = redirect
         self.routeGuard = routeGuard
+        self.guards = guards
+        self.middleware = middleware
         self.builder = { context in AnyView(builder(context)) }
     }
     
@@ -44,6 +54,8 @@ public struct Route {
         name: String? = nil,
         redirect: ((RouteContext) -> String?)? = nil,
         routeGuard: ((RouteContext) -> Bool)? = nil,
+        guards: [RouteGuard] = [],
+        middleware: [RouteMiddleware] = [],
         @ViewBuilder builder: @escaping (RouteContext) -> some View
     ) {
         self.init(
@@ -52,6 +64,8 @@ public struct Route {
             routes: [],
             redirect: redirect,
             routeGuard: routeGuard,
+            guards: guards,
+            middleware: middleware,
             builder: builder
         )
     }

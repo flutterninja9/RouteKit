@@ -183,12 +183,12 @@ public extension RouteKit {
     }
     
     /// Navigate with type-safe parameters
-    func go<T: TypeSafeRoute>(_ route: T, extra: Any? = nil) {
+    func go<T: TypeSafeRoute>(_ route: T, extra: (any Sendable)? = nil) {
         self.go(route.path, extra: extra)
     }
     
     /// Push with type-safe parameters
-    func push<T: TypeSafeRoute>(_ route: T, extra: Any? = nil) {
+    func push<T: TypeSafeRoute>(_ route: T, extra: (any Sendable)? = nil) {
         self.push(route.path, extra: extra)
     }
 }

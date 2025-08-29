@@ -186,14 +186,14 @@ public class RouteKitEnvironment: ObservableObject {
 
 extension View {
     /// Navigate to a path using the environment router
-    public func navigate(to path: String, extra: Any? = nil) {
+    public func navigate(to path: String, extra: (any Sendable)? = nil) {
         if let router = RouteKitEnvironment.shared.current {
             router.go(path, extra: extra)
         }
     }
     
     /// Push a path using the environment router
-    public func pushRoute(_ path: String, extra: Any? = nil) {
+    public func pushRoute(_ path: String, extra: (any Sendable)? = nil) {
         if let router = RouteKitEnvironment.shared.current {
             router.push(path, extra: extra)
         }
