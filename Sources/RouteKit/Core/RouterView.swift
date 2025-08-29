@@ -34,7 +34,26 @@ private struct CurrentRouteView: View {
     
     var body: some View {
         Group {
-            if let matchingRoute = findMatchingRoute() {
+            // Check for stateful shell route first
+            if let statefulShell = router.currentStatefulShell,
+               let (_, route) = findMatchingStatefulShellRoute() {
+                let statefulShellRoute = router.statefulShellRoutes.first { shell in
+                    shell.findMatchingBranch(for: router.currentPath) != nil
+                }
+                
+                if let shellRoute = statefulShellRoute {
+                    shellRoute.builder(router.currentContext, statefulShell)
+                } else {
+                    route.builder(router.currentContext)
+                }
+            }
+            // Check for regular shell route
+            else if let (shell, route) = findMatchingShellRoute() {
+                let childView = AnyView(route.builder(router.currentContext))
+                shell.builder(router.currentContext, childView)
+            }
+            // Regular route
+            else if let matchingRoute = findMatchingRoute() {
                 matchingRoute.builder(router.currentContext)
             } else {
                 DefaultNotFoundView(path: router.currentPath)
@@ -54,6 +73,26 @@ private struct CurrentRouteView: View {
                 if let _ = childRoute.matches(path: router.currentPath) {
                     return childRoute
                 }
+            }
+        }
+        return nil
+    }
+    
+    private func findMatchingShellRoute() -> (ShellRoute, Route)? {
+        for shell in router.shellRoutes {
+            for route in shell.allRoutes {
+                if let _ = route.matches(path: router.currentPath) {
+                    return (shell, route)
+                }
+            }
+        }
+        return nil
+    }
+    
+    private func findMatchingStatefulShellRoute() -> (branchIndex: Int, route: Route)? {
+        for statefulShell in router.statefulShellRoutes {
+            if let match = statefulShell.findMatchingBranch(for: router.currentPath) {
+                return match
             }
         }
         return nil

@@ -12,6 +12,12 @@ public class RouteKit: ObservableObject {
     /// The configured routes
     public let routes: [Route]
     
+    /// The configured shell routes
+    public let shellRoutes: [ShellRoute]
+    
+    /// The configured stateful shell routes
+    public let statefulShellRoutes: [StatefulShellRoute]
+    
     /// The initial route path
     public let initialRoute: String
     
@@ -23,6 +29,12 @@ public class RouteKit: ObservableObject {
     
     /// Navigation history stack
     @Published public private(set) var navigationStack: [String]
+    
+    /// Current shell (if navigating within a shell)
+    @Published public internal(set) var currentShell: ShellRoute?
+    
+    /// Current stateful shell (if navigating within a stateful shell)
+    @Published public internal(set) var currentStatefulShell: StatefulNavigationShell?
     
     /// Error builder for handling routing errors
     public let errorBuilder: ((Error) -> AnyView)?
@@ -45,7 +57,9 @@ public class RouteKit: ObservableObject {
     // MARK: - Initialization
     
     public init(
-        routes: [Route],
+        routes: [Route] = [],
+        shellRoutes: [ShellRoute] = [],
+        statefulShellRoutes: [StatefulShellRoute] = [],
         initialRoute: String = "/",
         errorBuilder: ((Error) -> AnyView)? = nil,
         redirect: ((RouteContext) -> String?)? = nil,
@@ -53,14 +67,19 @@ public class RouteKit: ObservableObject {
         redirectLimit: Int = 5
     ) {
         self.routes = routes
+        self.shellRoutes = shellRoutes
+        self.statefulShellRoutes = statefulShellRoutes
         self.initialRoute = initialRoute
         self.errorBuilder = errorBuilder
         self.redirect = redirect
         self.debugLogDiagnostics = debugLogDiagnostics
         self.redirectLimit = redirectLimit
         
-        // Flatten routes for efficient lookup
-        self.flatRoutes = routes.flatMap { $0.allRoutes }
+        // Flatten routes for efficient lookup (including shell routes)
+        var allRoutes = routes.flatMap { $0.allRoutes }
+        allRoutes.append(contentsOf: shellRoutes.flatMap { $0.allRoutes })
+        allRoutes.append(contentsOf: statefulShellRoutes.flatMap { $0.allRoutes })
+        self.flatRoutes = allRoutes
         
         // Build named routes lookup
         self.namedRoutes = Dictionary(
@@ -76,6 +95,21 @@ public class RouteKit: ObservableObject {
         self.currentPath = initialRoute
         self.currentContext = initialContext
         self.navigationStack = [initialRoute]
+        
+        // Initialize shell states
+        self.currentShell = nil
+        
+        // Initialize stateful shell (create the first one if available)
+        if let firstStatefulShellRoute = statefulShellRoutes.first {
+            self.currentStatefulShell = StatefulNavigationShell(branches: firstStatefulShellRoute.branches, router: nil)
+        } else {
+            self.currentStatefulShell = nil
+        }
+        
+        // Set router reference for stateful shell after initialization
+        DispatchQueue.main.async { [weak self] in
+            self?.currentStatefulShell?.router = self
+        }
     }
     
     // MARK: - Public Navigation Methods
@@ -275,7 +309,7 @@ public class RouteKit: ObservableObject {
         return path
     }
     
-    private func handleError(_ error: Error) {
+    internal func handleError(_ error: Error) {
         log("Routing error: \(error)")
         
         if errorBuilder != nil {
@@ -293,6 +327,35 @@ public class RouteKit: ObservableObject {
     private func log(_ message: String) {
         if debugLogDiagnostics {
             print("[RouteKit] \(message)")
+        }
+    }
+    
+    // MARK: - Internal State Updates
+    
+    /// Update the current path (internal use)
+    internal func updateCurrentPath(_ path: String) {
+        currentPath = path
+    }
+    
+    /// Update the current context (internal use)  
+    internal func updateCurrentContext(_ context: RouteContext) {
+        currentContext = context
+    }
+    
+    /// Update the navigation stack (internal use)
+    internal func updateNavigationStack(_ stack: [String]) {
+        navigationStack = stack
+    }
+    
+    /// Append to navigation stack (internal use)
+    internal func appendToNavigationStack(_ path: String) {
+        navigationStack.append(path)
+    }
+    
+    /// Remove last from navigation stack (internal use)
+    internal func removeLastFromNavigationStack() {
+        if navigationStack.count > 1 {
+            navigationStack.removeLast()
         }
     }
 }
