@@ -57,6 +57,9 @@ public class RouteKit: ObservableObject {
     /// Named routes lookup
     private let namedRoutes: [String: Route]
     
+    /// Expose all routes (flattened) for internal consumers like NavigationController/tests
+    internal var allRoutes: [Route] { flatRoutes }
+    
     // MARK: - Initialization
     
     public init(
@@ -300,8 +303,8 @@ public class RouteKit: ObservableObject {
             return
         }
         
-        // Create route context for guard and middleware execution
-        let routeContext = RouteContext(
+    // Create route context for guard and middleware execution
+    let routeContext = RouteContext(
             fullPath: finalPath,
             matchedPath: match.matchedPath,
             pathParameters: match.pathParameters,
@@ -310,8 +313,14 @@ public class RouteKit: ObservableObject {
             navigationStack: navigationStack
         )
         
-        // Execute guards and middleware asynchronously
-        Task { @MainActor in
+    // Optimistically update current path/context so synchronous queries (breadcrumbs/parent/depth) reflect intent.
+    // The final validated navigation (after guards/middleware) will reconcile state if redirected/denied.
+    // Only update the simple path/context here; maintain stack changes until completion to avoid duplications.
+    currentPath = routeContext.fullPath
+    currentContext = routeContext
+        
+    // Execute guards and middleware asynchronously
+    Task { @MainActor in
             await executeGuardsAndMiddleware(for: routeContext, route: match.route, replace: replace, updateStack: updateStack)
         }
     }

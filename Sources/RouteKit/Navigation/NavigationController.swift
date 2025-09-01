@@ -21,8 +21,8 @@ public class NavigationController: ObservableObject {
     func findBestMatch(for path: String) -> RouteMatch? {
         guard let router = router else { return nil }
         
-        // Use enhanced nested route matching
-        if let route = nestedRouteManager.findBestMatch(for: path, in: router.routes) {
+        // Try direct matches across all known routes first
+        for route in router.allRoutes {
             if let match = route.matches(path: path) {
                 router.currentShell = nil
                 router.currentStatefulShell = nil
@@ -59,7 +59,7 @@ public class NavigationController: ObservableObject {
     /// Get child routes for a given parent path
     public func findChildRoutes(for parentPath: String) -> [Route] {
         guard let router = router else { return [] }
-        return nestedRouteManager.findChildRoutes(for: parentPath, in: router.routes)
+    return nestedRouteManager.findChildRoutes(for: parentPath, in: router.allRoutes)
     }
     
     /// Check if a route is a child of another route
