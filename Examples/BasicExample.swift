@@ -160,11 +160,20 @@ struct RouteKitExampleApp: App {
     
     var body: some Scene {
         WindowGroup {
-            NavigationView {
-                RouterView(router: router)
-            }
-            .onOpenURL { url in
-                router.handleDeepLink(url)
+            if #available(iOS 16.0, macOS 13.0, *) {
+                NavigationStack {
+                    RouterView(router: router)
+                }
+                .onOpenURL { url in
+                    router.handleDeepLink(url)
+                }
+            } else {
+                NavigationView {
+                    RouterView(router: router)
+                }
+                .onOpenURL { url in
+                    router.handleDeepLink(url)
+                }
             }
         }
     }
@@ -172,7 +181,13 @@ struct RouteKitExampleApp: App {
 
 #Preview {
     let router = createSampleRouter()
-    return NavigationView {
-        RouterView(router: router)
+    if #available(iOS 16.0, macOS 13.0, *) {
+        return NavigationStack {
+            RouterView(router: router)
+        }
+    } else {
+        return NavigationView {
+            RouterView(router: router)
+        }
     }
 }

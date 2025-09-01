@@ -232,7 +232,7 @@ extension Route {
         let fullPattern = basePath.isEmpty ? self.path : "\(basePath)\(self.path)"
         let pattern = RoutePattern(fullPattern)
         
-        if let match = pattern.match(path) {
+        if let match = pattern.match(path, route: self) {
             return RouteMatch(
                 route: self,
                 pathParameters: match.pathParameters,

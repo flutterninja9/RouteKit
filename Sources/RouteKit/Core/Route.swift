@@ -75,7 +75,7 @@ public struct Route {
 extension Route {
     /// Check if this route matches the given path
     internal func matches(path: String) -> RouteMatch? {
-        return RoutePattern(self.path).match(path)
+        return RoutePattern(self.path).match(path, route: self)
     }
     
     /// Get all routes including nested routes in a flat list
@@ -113,13 +113,13 @@ internal struct RoutePattern {
         self.segments = Self.parsePattern(pattern)
     }
     
-    func match(_ path: String) -> RouteMatch? {
+    func match(_ path: String, route: Route) -> RouteMatch? {
         let pathSegments = path.split(separator: "/").map(String.init)
         let patternSegments = self.segments
         
         // Handle root path
         if pattern == "/" && path == "/" {
-            return RouteMatch(route: Route(path: "/", builder: { _ in EmptyView() }), matchedPath: "/")
+            return RouteMatch(route: route, matchedPath: "/")
         }
         
         var parameters: [String: String] = [:]
@@ -156,7 +156,7 @@ internal struct RoutePattern {
         let remainingPath = remainingSegments.isEmpty ? "" : "/" + remainingSegments.joined(separator: "/")
         
         return RouteMatch(
-            route: Route(path: pattern, builder: { _ in EmptyView() }),
+            route: route,
             pathParameters: parameters,
             matchedPath: matchedPath,
             remainingPath: remainingPath

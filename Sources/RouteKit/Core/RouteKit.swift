@@ -97,7 +97,15 @@ public class RouteKit: ObservableObject {
         )
         
         // Initialize with the initial route
-        let initialContext = RouteContext(fullPath: initialRoute)
+        let initialComponents = URLComponents(string: initialRoute) ?? URLComponents()
+        let queryParams = initialComponents.queryItems?.reduce(into: [String: String]()) { result, item in
+            result[item.name] = item.value ?? ""
+        } ?? [:]
+        
+        let initialContext = RouteContext(
+            fullPath: initialRoute,
+            queryParameters: queryParams
+        )
         self.currentPath = initialRoute
         self.currentContext = initialContext
         self.navigationStack = [initialRoute]
@@ -303,11 +311,18 @@ public class RouteKit: ObservableObject {
             return
         }
         
-    // Create route context for guard and middleware execution
-    let routeContext = RouteContext(
+        // Parse query parameters from the final path
+        let components = URLComponents(string: finalPath) ?? URLComponents()
+        let queryParams = components.queryItems?.reduce(into: [String: String]()) { result, item in
+            result[item.name] = item.value ?? ""
+        } ?? [:]
+        
+        // Create route context for guard and middleware execution
+        let routeContext = RouteContext(
             fullPath: finalPath,
             matchedPath: match.matchedPath,
             pathParameters: match.pathParameters,
+            queryParameters: queryParams,
             extra: extra,
             name: match.route.name,
             navigationStack: navigationStack

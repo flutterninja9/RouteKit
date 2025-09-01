@@ -7,6 +7,7 @@ public struct RouterView: View {
     
     public init(router: RouteKit) {
         self.router = router
+        RouteKitEnvironment.shared.current = router
     }
     
     public var body: some View {
@@ -64,13 +65,35 @@ private struct CurrentRouteView: View {
     private func findMatchingRoute() -> Route? {
         // Find the route that matches the current path
         for route in router.routes {
-            if let _ = route.matches(path: router.currentPath) {
+            if let match = route.matches(path: router.currentPath) {
+                // Update the router's context with the match information
+                let updatedContext = RouteContext(
+                    fullPath: router.currentPath,
+                    matchedPath: match.matchedPath,
+                    pathParameters: match.pathParameters,
+                    queryParameters: router.currentContext.queryParameters,
+                    extra: router.currentContext.extra,
+                    name: route.name,
+                    navigationStack: router.navigationStack
+                )
+                router.updateCurrentContext(updatedContext)
                 return route
             }
             
             // Check child routes
             for childRoute in route.allRoutes {
-                if let _ = childRoute.matches(path: router.currentPath) {
+                if let match = childRoute.matches(path: router.currentPath) {
+                    // Update the router's context with the match information
+                    let updatedContext = RouteContext(
+                        fullPath: router.currentPath,
+                        matchedPath: match.matchedPath,
+                        pathParameters: match.pathParameters,
+                        queryParameters: router.currentContext.queryParameters,
+                        extra: router.currentContext.extra,
+                        name: childRoute.name,
+                        navigationStack: router.navigationStack
+                    )
+                    router.updateCurrentContext(updatedContext)
                     return childRoute
                 }
             }
@@ -81,7 +104,18 @@ private struct CurrentRouteView: View {
     private func findMatchingShellRoute() -> (ShellRoute, Route)? {
         for shell in router.shellRoutes {
             for route in shell.allRoutes {
-                if let _ = route.matches(path: router.currentPath) {
+                if let match = route.matches(path: router.currentPath) {
+                    // Update the router's context with the match information
+                    let updatedContext = RouteContext(
+                        fullPath: router.currentPath,
+                        matchedPath: match.matchedPath,
+                        pathParameters: match.pathParameters,
+                        queryParameters: router.currentContext.queryParameters,
+                        extra: router.currentContext.extra,
+                        name: route.name,
+                        navigationStack: router.navigationStack
+                    )
+                    router.updateCurrentContext(updatedContext)
                     return (shell, route)
                 }
             }
